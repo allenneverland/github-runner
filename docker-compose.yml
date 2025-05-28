@@ -1,65 +1,38 @@
+version: '3.8'
+
 services:
-  # Rust Runner
+  # Rust Runner - 包含 postgresql-client
   rust-runner:
-    build:
-      context: .
-      dockerfile: Dockerfile.runner
-      target: final
-      # 建置快取優化
-      cache_from:
-        - github-runner-tools:latest
+    image: myoung34/github-runner:latest
     container_name: rust-runner
     restart: unless-stopped
     environment:
-      # GitHub 設定
       - REPO_URL=https://github.com/allenneverland/backtest-server
       - ACCESS_TOKEN=${ACCESS_TOKEN}
       - RUNNER_NAME=rust-runner
       - RUNNER_LABELS=rust,cargo,backend,linux,x64
       - RUNNER_GROUP=default
       - RUNNER_WORK_DIRECTORY=/tmp/runner/work
-      
-      # Rust 編譯優化
-      - CARGO_HOME=/home/runner/.cargo
-      - CARGO_TARGET_DIR=/tmp/cargo-target
-      - CARGO_INCREMENTAL=1
-      - CARGO_NET_RETRY=10
-      - RUSTUP_MAX_RETRIES=10
-      
+      - PATH=/home/runner/.local/bin:/home/runner/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - rust_runner_data:/tmp/runner
-      
-      # Rust 快取卷
-      - rust_cargo_registry:/home/runner/.cargo/registry
-      - rust_cargo_git:/home/runner/.cargo/git
-      - rust_cargo_target:/tmp/cargo-target
-      
-      # 共享快取 (如果多個 rust runner 共享)
-      - shared_cargo_cache:/home/runner/.cargo/registry/cache
-      
-    # 增加共享記憶體，對 Rust 編譯有幫助
+      - rust_cargo_cache:/home/runner/.cargo
+    command: >
+      bash -c "
+        echo 'Installing system tools...' &&
+        sudo apt-get update &&
+        sudo apt-get install -y postgresql-client redis-tools build-essential curl &&
+        echo 'Verifying pg_isready installation...' &&
+        which pg_isready && pg_isready --version &&
+        echo 'Starting GitHub runner...' &&
+        exec /home/runner/entrypoint.sh
+      "
     shm_size: '2gb'
-    
-    # 資源限制
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '2.0'
-        reservations:
-          memory: 2G
-          cpus: '1.0'
 
-  # Python & React Runner
+  # Python & React Runner - 包含 postgresql-client
   python-react-runner:
-    build:
-      context: .
-      dockerfile: Dockerfile.runner
-      target: final
-      # 建置快取優化
-      cache_from:
-        - github-runner-tools:latest
+    image: myoung34/github-runner:latest
     container_name: python-react-runner
     restart: unless-stopped
     environment:
@@ -69,66 +42,25 @@ services:
       - RUNNER_LABELS=python,react,nodejs,web,linux,x64
       - RUNNER_GROUP=default
       - RUNNER_WORK_DIRECTORY=/tmp/runner/work
-      
-      # Node.js 和 Python 優化
-      - NPM_CONFIG_CACHE=/home/runner/.npm
-      - YARN_CACHE_FOLDER=/home/runner/.yarn-cache
-      - PIP_CACHE_DIR=/home/runner/.cache/pip
-      - NODE_OPTIONS=--max-old-space-size=2048
-      
+      - PATH=/home/runner/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - python_react_runner_data:/tmp/runner
-      
-      # Node.js 快取卷
-      - nodejs_npm_cache:/home/runner/.npm
-      - nodejs_yarn_cache:/home/runner/.yarn-cache
-      - nodejs_node_modules:/tmp/node_modules_cache
-      
-      # Python 快取卷
-      - python_pip_cache:/home/runner/.cache/pip
-      - python_venv_cache:/home/runner/.local
-      
-    # 增加共享記憶體，對 Node.js 建置有幫助
+      - python_cache:/home/runner/.cache
+    command: >
+      bash -c "
+        echo 'Installing system tools...' &&
+        sudo apt-get update &&
+        sudo apt-get install -y postgresql-client redis-tools python3-pip nodejs npm curl &&
+        echo 'Verifying pg_isready installation...' &&
+        which pg_isready && pg_isready --version &&
+        echo 'Starting GitHub runner...' &&
+        exec /home/runner/entrypoint.sh
+      "
     shm_size: '2gb'
-    
-    # 資源限制
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '2.0'
-        reservations:
-          memory: 2G
-          cpus: '1.0'
 
 volumes:
-  # Runner 資料卷
   rust_runner_data:
-    driver: local
   python_react_runner_data:
-    driver: local
-    
-  # Rust 快取卷
-  rust_cargo_registry:
-    driver: local
-  rust_cargo_git:
-    driver: local
-  rust_cargo_target:
-    driver: local
-  shared_cargo_cache:
-    driver: local
-    
-  # Node.js 快取卷
-  nodejs_npm_cache:
-    driver: local
-  nodejs_yarn_cache:
-    driver: local
-  nodejs_node_modules:
-    driver: local
-    
-  # Python 快取卷
-  python_pip_cache:
-    driver: local
-  python_venv_cache:
-    driver: local
+  rust_cargo_cache:
+  python_cache:
