@@ -15,12 +15,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - rust_runner_data:/tmp/Runner
-      - ./init-rust.sh:/usr/local/bin/init-packages.sh:ro
     shm_size: '2gb'
     entrypoint: >
       bash -c "
-      chmod +x /usr/local/bin/init-packages.sh &&
-      /usr/local/bin/init-packages.sh &&
+      apt-get update -y &&
+      apt-get install -y postgresql-client redis-tools build-essential &&
       /entrypoint.sh
       "
 
@@ -40,12 +39,11 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - python_react_runner_data:/tmp/runner
-      - ./init-python.sh:/usr/local/bin/init-packages.sh:ro
     shm_size: '2gb'
     entrypoint: >
       bash -c "
-      chmod +x /usr/local/bin/init-packages.sh &&
-      /usr/local/bin/init-packages.sh &&
+      apt-get update -y &&
+      apt-get install -y postgresql-client redis-tools nodejs npm python3-pip &&
       /entrypoint.sh
       "
 
