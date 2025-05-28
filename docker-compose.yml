@@ -1,5 +1,5 @@
 services:
-  # Rust Runner - 最簡化版本
+  # Rust Runner
   rust-runner:
     image: myoung34/github-runner:latest
     container_name: rust-runner
@@ -11,20 +11,20 @@ services:
       - RUNNER_LABELS=rust,cargo,backend,linux,x64
       - RUNNER_GROUP=default
       - RUNNER_WORK_DIRECTORY=/tmp/runner/work
-      # 預設安裝工具
       - DISABLE_AUTO_UPDATE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - rust_runner_data:/tmp/Runner
-    command: >
-      bash -c "
-        sudo apt-get update &&
-        sudo apt-get install -y postgresql-client redis-tools build-essential
-      "
-    # 不覆蓋 entrypoint，使用原始啟動流程
+      - ./init-rust.sh:/usr/local/bin/init-packages.sh:ro
     shm_size: '2gb'
+    entrypoint: >
+      bash -c "
+      chmod +x /usr/local/bin/init-packages.sh &&
+      /usr/local/bin/init-packages.sh &&
+      /entrypoint.sh
+      "
 
-  # Python & React Runner - 最簡化版本
+  # Python & React Runner
   python-react-runner:
     image: myoung34/github-runner:latest
     container_name: python-react-runner
@@ -40,12 +40,14 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - python_react_runner_data:/tmp/runner
-    command: >
-      bash -c "
-        sudo apt-get update &&
-        sudo apt-get install -y postgresql-client redis-tools nodejs npm python3-pip
-      "
+      - ./init-python.sh:/usr/local/bin/init-packages.sh:ro
     shm_size: '2gb'
+    entrypoint: >
+      bash -c "
+      chmod +x /usr/local/bin/init-packages.sh &&
+      /usr/local/bin/init-packages.sh &&
+      /entrypoint.sh
+      "
 
 volumes:
   rust_runner_data:
