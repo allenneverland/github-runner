@@ -25,6 +25,17 @@ fi
 DOCKER_BUILDKIT=1
 
 if [ "$USE_BUILDX" = true ]; then
+    echo -e "${BLUE}Setting up buildx builder...${NC}"
+    
+    # 檢查是否已有 builder 實例
+    if ! docker buildx inspect mybuilder >/dev/null 2>&1; then
+        echo -e "${YELLOW}Creating new buildx builder...${NC}"
+        docker buildx create --name mybuilder --driver docker-container --use --bootstrap
+    else
+        echo -e "${GREEN}Using existing buildx builder...${NC}"
+        docker buildx use mybuilder
+    fi
+    
     echo -e "${BLUE}Building with buildx (advanced caching)...${NC}"
     
     # 使用 buildx 進行多階段建置，啟用快取
