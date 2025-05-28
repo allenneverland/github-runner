@@ -1,0 +1,39 @@
+services:
+  # Rust Runner
+  rust-runner:
+    image: myoung34/github-runner:latest
+    container_name: rust-runner
+    restart: unless-stopped
+    environment:
+      # GitHub 設定 (請替換成你的實際值)
+      - REPO_URL=https://github.com/allenneverland/backtest-server
+      - ACCESS_TOKEN=${ACCESS_TOKEN}
+      - RUNNER_NAME=rust-runner
+      - RUNNER_LABELS=rust,cargo,backend,linux,x64
+      - RUNNER_GROUP=default
+      - RUNNER_WORK_DIRECTORY=/tmp/runner/work
+      
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - rust_runner_data:/tmp/runner
+
+  # Python & React Runner
+  python-react-runner:
+    image: myoung34/github-runner:latest
+    container_name: python-react-runner
+    restart: unless-stopped
+    environment:
+      - REPO_URL=https://github.com/allenneverland/stratplat-web-server
+      - ACCESS_TOKEN=${ACCESS_TOKEN}
+      - RUNNER_NAME=python-react-runner
+      - RUNNER_LABELS=python,react,nodejs,web,linux,x64
+      - RUNNER_GROUP=default
+      - RUNNER_WORK_DIRECTORY=/tmp/runner/work
+      
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - python_react_runner_data:/tmp/runner
+
+volumes:
+  rust_runner_data:
+  python_react_runner_data:
