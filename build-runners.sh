@@ -9,17 +9,60 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}🚀 Building GitHub Runner image (simplified)...${NC}"
+echo -e "${BLUE}🚀 Building optimized GitHub Runner image...${NC}"
 
-# 使用標準 Docker 建置
-echo -e "${BLUE}Building with standard Docker build...${NC}"
+# 檢查 Docker 建置快取
+echo -e "${YELLOW}📦 Checking Docker buildx...${NC}"
+if ! docker buildx version >/dev/null 2>&1; then
+    echo -e "${YELLOW}⚠️  Docker buildx not found, using regular build${NC}"
+    USE_BUILDX=false
+else
+    echo -e "${GREEN}✅ Docker buildx available${NC}"
+    USE_BUILDX=true
+fi
 
-# 建置映像
-DOCKER_BUILDKIT=1 docker build \
-    -f Dockerfile.runner \
-    --target final \
-    --tag github-runner-tools:latest \
-    .
+# 建置映像選項
+DOCKER_BUILDKIT=1
+
+if [ "$USE_BUILDX" = true ]; then
+    echo -e "${BLUE}Setting up buildx builder...${NC}"
+    
+    # 檢查是否已有 builder 實例
+    if ! docker buildx inspect mybuilder >/dev/null 2>&1; then
+        echo -e "${YELLOW}Creating new buildx builder...${NC}"
+        docker buildx create --name mybuilder --driver docker-container --use --bootstrap
+    else
+        echo -e "${GREEN}Using existing buildx builder...${NC}"
+        docker buildx use mybuilder
+    fi
+    
+    echo -e "${BLUE}Building with buildx (advanced caching)...${NC}"
+    
+    # 使用 buildx 進行多階段建置，啟用快取
+    docker buildx build \
+        --file Dockerfile.runner \
+        --target final \
+        --tag github-runner-tools:latest \
+        --cache-from type=local,src=/tmp/.buildx-cache \
+        --cache-to type=local,dest=/tmp/.buildx-cache-new,mode=max \
+        --load \
+        .
+    
+    # 更新快取
+    if [ -d /tmp/.buildx-cache-new ]; then
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+    fi
+else
+    echo -e "${BLUE}Building with standard Docker build...${NC}"
+    
+    # 標準建置
+    DOCKER_BUILDKIT=1 docker build \
+        -f Dockerfile.runner \
+        --target final \
+        --tag github-runner-tools:latest \
+        .
+fi
 
 echo -e "${GREEN}✅ Custom runner image built successfully!${NC}"
 
@@ -28,19 +71,19 @@ echo -e "${BLUE}📦 Image information:${NC}"
 docker images github-runner-tools:latest --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
 
 # 映像層分析
-echo -e "${BLUE}📊 Image layers (top 10):${NC}"
-docker history github-runner-tools:latest --format "table {{.CreatedBy}}\t{{.Size}}" | head -11
+echo -e "${BLUE}📊 Image layers:${NC}"
+docker history github-runner-tools:latest --format "table {{.CreatedBy}}\t{{.Size}}"
 
 # 測試映像
 echo -e "${YELLOW}🧪 Testing image...${NC}"
-if docker run --rm --entrypoint="" github-runner-tools:latest /bin/bash -c "
+if docker run --rm github-runner-tools:latest /bin/bash -c "
     echo 'Testing tools...' &&
-    which git >/dev/null && echo '✅ Git available' &&
-    which node >/dev/null && echo '✅ Node.js available' &&
-    which python3 >/dev/null && echo '✅ Python available' &&
-    which cargo >/dev/null && echo '✅ Cargo available' &&
-    which pg_isready >/dev/null && echo '✅ PostgreSQL client available' &&
-    which redis-cli >/dev/null && echo '✅ Redis client available' &&
+    which git && echo '✅ Git available' &&
+    which node && echo '✅ Node.js available' &&
+    which python3 && echo '✅ Python available' &&
+    which cargo && echo '✅ Cargo available' &&
+    which pg_isready && echo '✅ PostgreSQL client available' &&
+    which redis-cli && echo '✅ Redis client available' &&
     echo 'All tools working!'
 "; then
     echo -e "${GREEN}✅ Image test passed!${NC}"
@@ -65,131 +108,26 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         exit 1
     fi
     
-    # 檢查是否已登入 Docker Hub
-    if ! docker info | grep -q "Username:"; then
-        echo -e "${YELLOW}⚠️  Please login to Docker Hub first:${NC}"
-        echo "docker login"
-        exit 1
-    fi
-    
     # 標記映像
-    echo -e "${BLUE}🏷️  Tagging image...${NC}"
     docker tag github-runner-tools:latest $DOCKER_USERNAME/github-runner-tools:latest
     
     # 推送映像
     echo -e "${BLUE}📤 Pushing to Docker Hub...${NC}"
     if docker push $DOCKER_USERNAME/github-runner-tools:latest; then
         echo -e "${GREEN}✅ Image pushed to Docker Hub!${NC}"
-        echo -e "${YELLOW}💡 You can now use this in docker-compose.yml:${NC}"
-        echo "    image: $DOCKER_USERNAME/github-runner-tools:latest"
+        echo -e "${YELLOW}💡 You can now use 'image: $DOCKER_USERNAME/github-runner-tools:latest' in your docker-compose.yml${NC}"
         
-        # 更新 docker-compose.yml 範例
-        if [ -f "docker-compose.yml" ]; then
-            cp docker-compose.yml docker-compose.yml.backup
-            echo -e "${BLUE}📝 Created backup: docker-compose.yml.backup${NC}"
-        fi
-        
-        # 創建使用預建映像的版本
-        cat > docker-compose.prebuilt.yml << EOF
-version: '3.8'
+        # 創建 .env 範例
+        cat > .env.example << EOF
+# GitHub Access Token
+ACCESS_TOKEN=ghp_your_token_here
 
-services:
-  # Rust Runner
-  rust-runner:
-    image: $DOCKER_USERNAME/github-runner-tools:latest
-    container_name: rust-runner
-    restart: unless-stopped
-    environment:
-      - REPO_URL=https://github.com/allenneverland/backtest-server
-      - ACCESS_TOKEN=\${ACCESS_TOKEN}
-      - RUNNER_NAME=rust-runner
-      - RUNNER_LABELS=rust,cargo,backend,linux,x64
-      - RUNNER_GROUP=default
-      - RUNNER_WORK_DIRECTORY=/tmp/runner/work
-      - CARGO_HOME=/home/runner/.cargo
-      - CARGO_TARGET_DIR=/tmp/cargo-target
-      - CARGO_INCREMENTAL=1
-      - CARGO_NET_RETRY=10
-      - RUSTUP_MAX_RETRIES=10
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - rust_runner_data:/tmp/runner
-      - rust_cargo_registry:/home/runner/.cargo/registry
-      - rust_cargo_git:/home/runner/.cargo/git
-      - rust_cargo_target:/tmp/cargo-target
-      - shared_cargo_cache:/home/runner/.cargo/registry/cache
-    shm_size: '2gb'
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '2.0'
-        reservations:
-          memory: 2G
-          cpus: '1.0'
-
-  # Python & React Runner
-  python-react-runner:
-    image: $DOCKER_USERNAME/github-runner-tools:latest
-    container_name: python-react-runner
-    restart: unless-stopped
-    environment:
-      - REPO_URL=https://github.com/allenneverland/stratplat-web-server
-      - ACCESS_TOKEN=\${ACCESS_TOKEN}
-      - RUNNER_NAME=python-react-runner
-      - RUNNER_LABELS=python,react,nodejs,web,linux,x64
-      - RUNNER_GROUP=default
-      - RUNNER_WORK_DIRECTORY=/tmp/runner/work
-      - NPM_CONFIG_CACHE=/home/runner/.npm
-      - YARN_CACHE_FOLDER=/home/runner/.yarn-cache
-      - PIP_CACHE_DIR=/home/runner/.cache/pip
-      - NODE_OPTIONS=--max-old-space-size=2048
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - python_react_runner_data:/tmp/runner
-      - nodejs_npm_cache:/home/runner/.npm
-      - nodejs_yarn_cache:/home/runner/.yarn-cache
-      - nodejs_node_modules:/tmp/node_modules_cache
-      - python_pip_cache:/home/runner/.cache/pip
-      - python_venv_cache:/home/runner/.local
-    shm_size: '2gb'
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '2.0'
-        reservations:
-          memory: 2G
-          cpus: '1.0'
-
-volumes:
-  rust_runner_data:
-    driver: local
-  python_react_runner_data:
-    driver: local
-  rust_cargo_registry:
-    driver: local
-  rust_cargo_git:
-    driver: local
-  rust_cargo_target:
-    driver: local
-  shared_cargo_cache:
-    driver: local
-  nodejs_npm_cache:
-    driver: local
-  nodejs_yarn_cache:
-    driver: local
-  nodejs_node_modules:
-    driver: local
-  python_pip_cache:
-    driver: local
-  python_venv_cache:
-    driver: local
+# Optional: Use pre-built image instead of building locally
+# Uncomment the lines below in docker-compose.yml:
+# image: $DOCKER_USERNAME/github-runner-tools:latest
+# Comment out the 'build:' section
 EOF
-        
-        echo -e "${GREEN}📝 Created docker-compose.prebuilt.yml${NC}"
-        echo -e "${YELLOW}💡 To use prebuilt image: docker-compose -f docker-compose.prebuilt.yml up -d${NC}"
-        
+        echo -e "${GREEN}📝 Created .env.example with Docker Hub image reference${NC}"
     else
         echo -e "${RED}❌ Failed to push image${NC}"
     fi
@@ -205,12 +143,12 @@ echo "3. Start runners: docker-compose up -d"
 echo "4. Check status: docker-compose ps"
 echo "5. View logs: docker-compose logs -f"
 echo
-echo -e "${BLUE}💾 Available cache volumes:${NC}"
+echo -e "${BLUE}💾 Cache volumes created:${NC}"
 echo "- Rust cargo cache: rust_cargo_registry, rust_cargo_git"
 echo "- Node.js cache: nodejs_npm_cache, nodejs_yarn_cache" 
 echo "- Python cache: python_pip_cache, python_venv_cache"
 echo
-echo -e "${YELLOW}🔧 Management commands:${NC}"
-echo "- Cache status: ./manage-cache.sh status"
-echo "- Clean caches: ./manage-cache.sh clean"
-echo "- View system usage: docker system df"
+echo -e "${YELLOW}🔧 Cache management commands:${NC}"
+echo "- Clean all caches: docker-compose down -v"
+echo "- Clean only build caches: docker volume prune"
+echo "- View cache usage: docker system df"
