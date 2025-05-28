@@ -20,7 +20,7 @@ services:
       bash -c "
       apt-get update -y &&
       apt-get install -y postgresql-client redis-tools build-essential &&
-      /entrypoint.sh
+      /entrypoint.sh ./bin/runsvc.sh
       "
 
   # Python & React Runner
@@ -44,7 +44,7 @@ services:
       bash -c "
       apt-get update -y &&
       apt-get install -y postgresql-client redis-tools nodejs npm python3-pip &&
-      /entrypoint.sh
+      /entrypoint.sh ./bin/runsvc.sh
       "
 
 volumes:
