@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # Rust Runner
+  rust-runner:
+    image: myoung34/github-runner:latest
+    container_name: rust-runner
+    restart: unless-stopped
+    environment:
+      - REPO_URL=https://github.com/allenneverland/backtest-server
+      - ACCESS_TOKEN=${ACCESS_TOKEN}
+      - RUNNER_NAME=rust-runner
+      - RUNNER_LABELS=rust,cargo,backend,linux,x64
+      - RUNNER_GROUP=default
+      - RUNNER_WORK_DIRECTORY=/tmp/runner/work
+      - CARGO_HOME=/home/runner/.cargo
+      - CARGO_TARGET_DIR=/tmp/cargo-target
+      - CARGO_INCREMENTAL=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - rust_runner_data:/tmp/runner
+      - rust_cargo_cache:/home/runner/.cargo
+      - ./scripts/install-rust-tools.sh:/tmp/install-rust-tools.sh:ro
+    command: >
+      bash -c "
+        sudo apt-get update &&
+        sudo apt-get install -y postgresql-client redis-tools build-essential &&
+        bash /tmp/install-rust-tools.sh &&
+        /home/runner/entrypoint.sh
+      "
+    shm_size: '2gb'
+
+  # Python & React Runner
+  python-react-runner:
+    image: myoung34/github-runner:latest
+    container_name: python-react-runner
+    restart: unless-stopped
+    environment:
+      - REPO_URL=https://github.com/allenneverland/stratplat-web-server
+      - ACCESS_TOKEN=${ACCESS_TOKEN}
+      - RUNNER_NAME=python-react-runner
+      - RUNNER_LABELS=python,react,nodejs,web,linux,x64
+      - RUNNER_GROUP=default
+      - RUNNER_WORK_DIRECTORY=/tmp/runner/work
+      - NPM_CONFIG_CACHE=/home/runner/.npm
+      - PIP_CACHE_DIR=/home/runner/.cache/pip
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - python_react_runner_data:/tmp/runner
+      - python_npm_cache:/home/runner/.npm
+      - python_pip_cache:/home/runner/.cache/pip
+      - ./scripts/install-python-tools.sh:/tmp/install-python-tools.sh:ro
+    command: >
+      bash -c "
+        sudo apt-get update &&
+        sudo apt-get install -y postgresql-client redis-tools nodejs npm python3-pip &&
+        bash /tmp/install-python-tools.sh &&
+        /home/runner/entrypoint.sh
+      "
+    shm_size: '2gb'
+
+volumes:
+  rust_runner_data:
+  python_react_runner_data:
+  rust_cargo_cache:
+  python_npm_cache:
+  python_pip_cache:
