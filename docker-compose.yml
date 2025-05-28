@@ -1,7 +1,5 @@
-version: '3.8'
-
 services:
-  # Rust Runner - 包含 postgresql-client
+  # Rust Runner - 最簡化版本
   rust-runner:
     image: myoung34/github-runner:latest
     container_name: rust-runner
@@ -13,24 +11,16 @@ services:
       - RUNNER_LABELS=rust,cargo,backend,linux,x64
       - RUNNER_GROUP=default
       - RUNNER_WORK_DIRECTORY=/tmp/runner/work
-      - PATH=/home/runner/.local/bin:/home/runner/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      # 預設安裝工具
+      - DISABLE_AUTO_UPDATE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - rust_runner_data:/tmp/runner
-      - rust_cargo_cache:/home/runner/.cargo
-    command: >
-      bash -c "
-        echo 'Installing system tools...' &&
-        sudo apt-get update &&
-        sudo apt-get install -y postgresql-client redis-tools build-essential curl &&
-        echo 'Verifying pg_isready installation...' &&
-        which pg_isready && pg_isready --version &&
-        echo 'Starting GitHub runner...' &&
-        exec /home/runner/entrypoint.sh
-      "
+      - ./install-tools.sh:/usr/local/bin/install-tools.sh:ro
+    # 不覆蓋 entrypoint，使用原始啟動流程
     shm_size: '2gb'
 
-  # Python & React Runner - 包含 postgresql-client
+  # Python & React Runner - 最簡化版本
   python-react-runner:
     image: myoung34/github-runner:latest
     container_name: python-react-runner
@@ -42,25 +32,13 @@ services:
       - RUNNER_LABELS=python,react,nodejs,web,linux,x64
       - RUNNER_GROUP=default
       - RUNNER_WORK_DIRECTORY=/tmp/runner/work
-      - PATH=/home/runner/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - DISABLE_AUTO_UPDATE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - python_react_runner_data:/tmp/runner
-      - python_cache:/home/runner/.cache
-    command: >
-      bash -c "
-        echo 'Installing system tools...' &&
-        sudo apt-get update &&
-        sudo apt-get install -y postgresql-client redis-tools python3-pip nodejs npm curl &&
-        echo 'Verifying pg_isready installation...' &&
-        which pg_isready && pg_isready --version &&
-        echo 'Starting GitHub runner...' &&
-        exec /home/runner/entrypoint.sh
-      "
+      - ./install-tools.sh:/usr/local/bin/install-tools.sh:ro
     shm_size: '2gb'
 
 volumes:
   rust_runner_data:
   python_react_runner_data:
-  rust_cargo_cache:
-  python_cache:
